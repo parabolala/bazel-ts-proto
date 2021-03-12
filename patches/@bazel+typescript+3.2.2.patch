@@ -1,0 +1,65 @@
+diff --git a/node_modules/@bazel/typescript/internal/ts_config.bzl b/node_modules/@bazel/typescript/internal/ts_config.bzl
+index 8c20ccd..90e7648 100755
+--- a/node_modules/@bazel/typescript/internal/ts_config.bzl
++++ b/node_modules/@bazel/typescript/internal/ts_config.bzl
+@@ -82,10 +82,15 @@ def _write_tsconfig_rule(ctx):
+             "__extends__",
+             _relative_path(ctx.outputs.out, ctx.file.extends),
+         )
+-    if ctx.attr.files:
++    all_files = []
++    for f in ctx.attr.files:
++        if DefaultInfo in f:
++            for ff in f[DefaultInfo].files.to_list():
++                all_files.append(_relative_path(ctx.outputs.out, ff))
++    if all_files:
+         content = content.replace(
+             "\"__files__\"",
+-            str([_relative_path(ctx.outputs.out, f) for f in ctx.files.files]),
++            str(all_files),
+         )
+     ctx.actions.write(
+         output = ctx.outputs.out,
+diff --git a/node_modules/@bazel/typescript/internal/ts_project.bzl b/node_modules/@bazel/typescript/internal/ts_project.bzl
+index 74ba1f6..4c78159 100755
+--- a/node_modules/@bazel/typescript/internal/ts_project.bzl
++++ b/node_modules/@bazel/typescript/internal/ts_project.bzl
+@@ -8,12 +8,10 @@ load(":ts_config.bzl", "TsConfigInfo", "write_tsconfig")
+ _ValidOptionsInfo = provider()
+ 
+ _DEFAULT_TSC = (
+-    
+     "//typescript/bin:tsc"
+ )
+ 
+ _DEFAULT_TYPESCRIPT_PACKAGE = (
+-    
+     "//typescript"
+ )
+ 
+@@ -595,7 +593,7 @@ def ts_project_macro(
+         write_tsconfig(
+             name = "_gen_tsconfig_%s" % name,
+             config = tsconfig,
+-            files = [s for s in srcs if _is_ts_src(s, allow_js)],
++            files = srcs,
+             extends = Label("//%s:%s" % (native.package_name(), name)).relative(extends) if extends else None,
+             out = "tsconfig_%s.json" % name,
+         )
+@@ -630,7 +628,6 @@ def ts_project_macro(
+         nodejs_binary(
+             name = tsc_worker,
+             data = [
+-                
+                 Label(typescript_package),
+                 Label("//@bazel/typescript"),
+                 tsconfig,
+@@ -659,7 +656,7 @@ def ts_project_macro(
+     if declaration_map:
+         typing_maps_outs.extend(_out_paths(srcs, typings_out_dir, root_dir, allow_js, ".d.ts.map"))
+ 
+-    if not len(js_outs) and not len(typings_outs):
++    if False and not len(js_outs) and not len(typings_outs):
+         fail("""ts_project target "//{}:{}" is configured to produce no outputs.
+ 
+ Note that ts_project must know the srcs in advance in order to predeclare the outputs.

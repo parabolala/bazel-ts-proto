@@ -63,7 +63,7 @@ _rule = rule(
 )
 
 # Create macro for converting attrs and passing to compile
-def compile_ts_proto(**kwargs):
+def protobuf_ts_proto(**kwargs):
     _rule(
         verbose_string = "{}".format(kwargs.get("verbose", 0)),
         **kwargs
@@ -72,17 +72,21 @@ def compile_ts_proto(**kwargs):
 def _extract_ts_source_impl(ctx):
     pci = ctx.attr.ts_proto[ProtoCompileInfo]
 
+    outputs = []
+
     for d, fs in pci.output_files.items():
         command = ""
         for f in fs.to_list():
-            command = "cp %s %s" % (f.path, ctx.outputs.out.path)
-        ctx.actions.run_shell(
-            outputs = [ctx.outputs.out],
-            inputs = fs,
-            command = command,
-        )
+            output = ctx.actions.declare_file(f.short_path)
+            command = "cp %s %s" % (f.path, output.path)
+            ctx.actions.run_shell(
+                outputs = [output],
+                inputs = fs,
+                command = command,
+            )
+            outputs.append(output)
     return [DefaultInfo(
-        files = depset([ctx.outputs.out]),
+        files = depset(outputs),
     )]
 
 extract_ts_source = rule(
@@ -92,6 +96,5 @@ extract_ts_source = rule(
             mandatory = True,
             providers = [ProtoCompileInfo],
         ),
-        out = attr.output(),
     ),
 )

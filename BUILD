@@ -1,8 +1,10 @@
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@build_bazel_rules_nodejs//:index.bzl", "pkg_npm")
 load("@rules_proto_grpc//:defs.bzl", "proto_plugin")
-load("@npm//@bazel/typescript:index.bzl", "ts_project")
-load("//:protobuf-ts-proto-library.bzl", "compile_ts_proto", "extract_ts_source")
+load("@npm//@bazel/typescript:index.bzl", "ts_library", "ts_project")
+load("//:protobuf-ts-proto-library.bzl", "protobuf_ts_proto")
+
+exports_files(["rules_nodejs.patch"])
 
 proto_plugin(
     name = "protobuf-ts-plugin",
@@ -16,37 +18,55 @@ proto_plugin(
 
 proto_library(
     name = "test_proto",
-    srcs = ["test.proto"],
+    srcs = [
+        "test.proto",
+        "test2.proto",
+    ],
 )
 
 # Produces example.ts in the default outputs, but it can't be referenced
 # explicitly.
-compile_ts_proto(
-    name = "example",
-    protos = [":test_proto"],
+protobuf_ts_proto(
+    name = "example_ts_proto",
+    protos = ["test_proto"],
     verbose = 1,
-)
-
-# Moved example.ts from the ProtoCompileInfo.output_files[0] into the out file.
-extract_ts_source(
-    name = "example_ts",
-    ts_proto = ":example",
-    out = "example.ts",
 )
 
 # Produces .d.ts and .js from the given .ts.
 ts_project(
+    name = "tsconfig",
     tsconfig = {
         "compilerOptions": {
             "lib": ["es6", "dom"],
         },
     },
+    srcs = ["example_ts_proto"],
     declaration = True,
-    srcs = [
-        ":example.ts",
-    ],
+)
+
+ts_library(
+    tsconfig = ":tsconfig_tsconfig.json",
+    name = "lib",
+    srcs = [":example_ts_proto"],
     deps = [
         "@npm//@protobuf-ts/runtime",
+    ],
+)
+
+# Extract .js from .ts.
+filegroup(
+    name = "lib_js_only",
+    srcs = [
+        ":lib",
+    ],
+    output_group = "es5_sources",
+)
+
+# Extract .d.ts from .ts.
+filegroup(
+    name = "lib_dts_only",
+    srcs = [
+        ":lib",
     ],
 )
 
@@ -57,6 +77,8 @@ pkg_npm(
     srcs = [],
     deps = [
         ":package.json",
-        ":tsconfig",
+        ":lib_js_only",
+        ":lib_dts_only",
+        "patches/@bazel+typescript+3.2.2.patch",
     ],
 )
