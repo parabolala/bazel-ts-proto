@@ -1,6 +1,7 @@
 load("@rules_proto//proto:defs.bzl", "ProtoInfo")
 load(
     "@rules_proto_grpc//:defs.bzl",
+    "ProtoCompileInfo",
     "ProtoLibraryAspectNodeInfo",
     "ProtoPluginInfo",
     "proto_compile_aspect_attrs",
@@ -9,7 +10,7 @@ load(
     "proto_compile_impl",
 )
 
-TS_PLUGIN = "@npm//@protobuf-ts/plugin/bin:protoc-gen-ts"
+TS_PLUGIN = "//:protobuf-ts-plugin"
 
 # Create aspect
 example_aspect = aspect(
@@ -52,17 +53,45 @@ _rule = rule(
         _plugins = attr.label_list(
             providers = [ProtoPluginInfo],
             default = [
-                Label("//:ts_plugin"),
+                Label(TS_PLUGIN),
             ],
             doc = "List of protoc plugins to apply",
         ),
+        out = attr.output(),
     ),
     toolchains = [str(Label("@rules_proto_grpc//protobuf:toolchain_type"))],
 )
 
 # Create macro for converting attrs and passing to compile
-def example_compile(**kwargs):
+def compile_ts_proto(**kwargs):
     _rule(
         verbose_string = "{}".format(kwargs.get("verbose", 0)),
         **kwargs
     )
+
+def _extract_ts_source_impl(ctx):
+    pci = ctx.attr.ts_proto[ProtoCompileInfo]
+
+    for d, fs in pci.output_files.items():
+        command = ""
+        for f in fs.to_list():
+            command = "cp %s %s" % (f.path, ctx.outputs.out.path)
+        ctx.actions.run_shell(
+            outputs = [ctx.outputs.out],
+            inputs = fs,
+            command = command,
+        )
+    return [DefaultInfo(
+        files = depset([ctx.outputs.out]),
+    )]
+
+extract_ts_source = rule(
+    implementation = _extract_ts_source_impl,
+    attrs = dict(
+        ts_proto = attr.label(
+            mandatory = True,
+            providers = [ProtoCompileInfo],
+        ),
+        out = attr.output(),
+    ),
+)
